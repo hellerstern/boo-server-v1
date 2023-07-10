@@ -124,51 +124,68 @@ app.post('/getImg', async (req, res) => {
         console.log('getImages: ', err);
       }
       let flag = 0;
-      for (let img = 0; img < images.length; img++) {
-        if (flag == 1) return;
-        else  {
-          console.log('start...', img);
-          await loadModels().then(async () => {
-            const imagePath1 = './images/tmp/tmp.png';
-            const imagePath2 = `./images/${images[img].uId}.png`;
-            await compareFaces(imagePath1, imagePath2).then(async compResult => {
-              // If there is same images
-              if (compResult._distance <= 0.5) {
-                console.log(`CompResult:`, true);
-                flag = 1;
-                return res.send({
-                  ok: true,
-                  result: {
-                    flag: 0,
-                  }
-                });
-              }
-  
-              if (flag == 0 && images.length === Number(img) + 1) {
-                console.log('-----------------------------------');
-                getLastId((err, lastId) => {
-                  if (err) {
-                    console.error('Error:', err);
-                    return;
-                  }
-                  const filePath = `./images/${lastId + 1}.png`; // Replace with the desired file path
-                  saveImageFromBase64(imageBase64, filePath);
-                  DB_OBEJCT.query(`INSERT INTO user_images (iName, base64, uId) VALUES ("${filename}", '${imageBase64}', ${lastId + 1})`, (err, result) => {
-                    if (err) {
-                      throw err
-                    } else {
-                      console.log('Successed!');
-    
-                      return res.send({ ok: true,  result: {
-                        flag: 1,
-                        apikey: generateAPIKEY()
-                      } });
+      if (images.length === 0) {
+        const filePath = `./images/${1}.png`; // Replace with the desired file path
+        saveImageFromBase64(imageBase64, filePath);
+        DB_OBEJCT.query(`INSERT INTO user_images (iName, base64, uId) VALUES ("${filename}", '${imageBase64}', ${1})`, (err, result) => {
+          if (err) {
+            throw err
+          } else {
+            console.log('Successed!');
+
+            return res.send({ ok: true,  result: {
+              flag: 1,
+              apikey: generateAPIKEY()
+            } });
+          }
+        });
+      } else {
+        for (let img = 0; img < images.length; img++) {
+          if (flag == 1) return;
+          else  {
+            console.log('start...', img);
+            await loadModels().then(async () => {
+              const imagePath1 = './images/tmp/tmp.png';
+              const imagePath2 = `./images/${images[img].uId}.png`;
+              await compareFaces(imagePath1, imagePath2).then(async compResult => {
+                // If there is same images
+                if (compResult._distance <= 0.5) {
+                  console.log(`CompResult:`, true);
+                  flag = 1;
+                  return res.send({
+                    ok: true,
+                    result: {
+                      flag: 0,
                     }
                   });
-                });
-              }
-            }).catch(console.error);
-          });
+                }
+    
+                if (flag == 0 && images.length === Number(img) + 1) {
+                  console.log('-----------------------------------');
+                  getLastId((err, lastId) => {
+                    if (err) {
+                      console.error('Error:', err);
+                      return;
+                    }
+                    const filePath = `./images/${lastId + 1}.png`; // Replace with the desired file path
+                    saveImageFromBase64(imageBase64, filePath);
+                    DB_OBEJCT.query(`INSERT INTO user_images (iName, base64, uId) VALUES ("${filename}", '${imageBase64}', ${lastId + 1})`, (err, result) => {
+                      if (err) {
+                        throw err
+                      } else {
+                        console.log('Successed!');
+      
+                        return res.send({ ok: true,  result: {
+                          flag: 1,
+                          apikey: generateAPIKEY()
+                        } });
+                      }
+                    });
+                  });
+                }
+              }).catch(console.error);
+            });
+          }
         }
       }
     });
