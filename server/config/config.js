@@ -16,7 +16,7 @@ process.env.SEED = process.env.SEED || "Boo";
 // ============================
 //  Data base
 // ============================
-process.env.DBHOST = process.env.DBHOST || "localhost";
+process.env.DBHOST = process.env.DBHOST || "174.138.188.39";
 process.env.DBUSER = process.env.DBUSER || "root";
 process.env.DBPASSWORD = process.env.DBPASSWORD || "";
 process.env.DBNAME = process.env.DBNAME || "image"; 

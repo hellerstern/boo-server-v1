@@ -5,19 +5,18 @@ const { Canvas, Image, ImageData } = canvas;
 faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
 const fs = require('fs');
 const crypto = require("crypto");
+const axios = require('axios');
+const requestIp = require('request-ip');
 const DB_OBEJCT = require("../dbconnect");
 const app = express();
 
-const generateAPIKEY = () => {
+const generateAPIKEY = (plainText) => {
 
   // Generate a secret key for encryption and decryption.
   const secretKey = crypto.randomBytes(32);
 
   // Generate an initialization vector
   const iv = crypto.randomBytes(16);
-
-  // data to be encrypted
-  const plainText = process.env.SEED;
 
   // create cipher object
   const cipher = crypto.createCipheriv("aes-256-cbc", secretKey, iv);
@@ -35,6 +34,22 @@ const generateAPIKEY = () => {
   // let decryptedText = decipher.update(encryptedText, "hex", "utf-8");
 
   // decryptedText += decipher.final("utf-8");
+}
+
+const decodeAPIKEY = (apikey) => {
+  const secretKey = crypto.randomBytes(32);
+
+  const iv = crypto.randomBytes(16);
+  
+  const cipher = crypto.createCipheriv("aes-256-cbc", secretKey, iv);
+
+  const decipher = crypto.createDecipheriv("aes-256-cbc", secretKey, iv);
+
+  let decryptedText = decipher.update(apikey, "hex", "utf-8");
+
+  decryptedText += decipher.final("utf-8");
+
+  return decryptedText;
 }
 
 async function compareFaces(imagePath1, imagePath2) {
@@ -98,7 +113,6 @@ function getLastId(callback) {
   });
 }
 
-
 function getImages(callback) {
   DB_OBEJCT.query('SELECT uId, iName FROM user_images', (error, results, fields) => {
     if (error) {
@@ -106,6 +120,42 @@ function getImages(callback) {
     }
     callback(null, results);
   });
+}
+
+async function checkSamelocationImgthere(ipAddress) {
+  await DB_OBEJCT.query('SELECT apikey from user_images', (error, result, fields) => {
+    for (let i = 0; i < result.length; i++) {
+      console.log(`${i}:`, result[i])
+    }
+  })
+}
+
+app.get('/test', (req, res) => {
+  checkSamelocationImgthere(requestIp.getClientIp(req));
+})
+
+
+
+async function getLocation(ipAddress) {
+  try {
+    const response = await axios.get(`http://ip-api.com/json/${ipAddress}`);
+    const { status, country, regionName, city, zip, lat, lon } = response.data;
+
+    if (status === 'success') {
+      return {
+        country,
+        region: regionName,
+        city,
+        zip,
+        latitude: lat,
+        longitude: lon
+      };
+    } else {
+      throw new Error('Failed to get location');
+    }
+  } catch (error) {
+    throw new Error('Failed to get location');
+  }
 }
 
 app.post('/getImg', async (req, res) => {
