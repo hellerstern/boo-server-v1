@@ -10,47 +10,20 @@ const requestIp = require('request-ip');
 const DB_OBEJCT = require("../dbconnect");
 const app = express();
 
-const generateAPIKEY = (plainText) => {
+const generateAPIKEY = (ipAddress) => {
+  const cipher = crypto.createCipher('aes-256-cbc', process.env.SEED);
+  let encryptedWord = cipher.update(ipAddress, 'utf8', 'hex');
+  encryptedWord += cipher.final('hex');
+  console.log(`${ipAddress}:`, encryptedWord);
+  return encryptedWord;
+};
 
-  // Generate a secret key for encryption and decryption.
-  const secretKey = crypto.randomBytes(32);
-
-  // Generate an initialization vector
-  const iv = crypto.randomBytes(16);
-
-  // create cipher object
-  const cipher = crypto.createCipheriv("aes-256-cbc", secretKey, iv);
-
-  // encrypt the data
-  let encryptedText = cipher.update(plainText, "utf-8", "hex");
-
-  // finalize the encryption
-  encryptedText += cipher.final("hex");
-
-  return encryptedText;
-
-  // const decipher = crypto.createDecipheriv("aes-256-cbc", secretKey, iv);
-
-  // let decryptedText = decipher.update(encryptedText, "hex", "utf-8");
-
-  // decryptedText += decipher.final("utf-8");
-}
-
-const decodeAPIKEY = (apikey) => {
-  const secretKey = crypto.randomBytes(32);
-
-  const iv = crypto.randomBytes(16);
-  
-  const cipher = crypto.createCipheriv("aes-256-cbc", secretKey, iv);
-
-  const decipher = crypto.createDecipheriv("aes-256-cbc", secretKey, iv);
-
-  let decryptedText = decipher.update(apikey, "hex", "utf-8");
-
-  decryptedText += decipher.final("utf-8");
-
-  return decryptedText;
-}
+const decrypt = (apikey) => {
+  const decipher = crypto.createDecipher('aes-256-cbc', process.env.SEED);
+  let decryptedWord = decipher.update(apikey, 'hex', 'utf8');
+  decryptedWord += decipher.final('utf8');
+  return decryptedWord;
+};
 
 async function compareFaces(imagePath1, imagePath2) {
   const image1 = await canvas.loadImage(imagePath1);
@@ -122,19 +95,14 @@ function getImages(callback) {
   });
 }
 
-async function checkSamelocationImgthere(ipAddress) {
-  await DB_OBEJCT.query('SELECT apikey from user_images', (error, result, fields) => {
-    for (let i = 0; i < result.length; i++) {
-      console.log(`${i}:`, result[i])
+async function getApiKeyList(callback) {
+  await DB_OBEJCT.query('SELECT distinct apikey from user_images', (error, result, fields) => {
+    if (error) {
+      return callback(error);
     }
+    callback(null, result);
   })
 }
-
-app.get('/test', (req, res) => {
-  checkSamelocationImgthere(requestIp.getClientIp(req));
-})
-
-
 
 async function getLocation(ipAddress) {
   try {
@@ -177,7 +145,8 @@ app.post('/getImg', async (req, res) => {
       if (images.length === 0) {
         const filePath = `./images/${1}.png`; // Replace with the desired file path
         saveImageFromBase64(imageBase64, filePath);
-        DB_OBEJCT.query(`INSERT INTO user_images (iName, base64, uId) VALUES ("${filename}", '${imageBase64}', ${1})`, (err, result) => {
+        let apikey = generateAPIKEY(requestIp.getClientIp(req));
+        DB_OBEJCT.query(`INSERT INTO user_images (iName, base64, uId, apikey) VALUES ("${filename}", "${imageBase64}", ${1}, "${apikey}")`, (err, result) => {
           if (err) {
             throw err
           } else {
@@ -185,10 +154,12 @@ app.post('/getImg', async (req, res) => {
 
             return res.send({ ok: true,  result: {
               flag: 1,
-              apikey: generateAPIKEY()
+              apikey
             } });
           }
         });
+
+
       } else {
         for (let img = 0; img < images.length; img++) {
           if (flag == 1) return;
@@ -217,20 +188,36 @@ app.post('/getImg', async (req, res) => {
                       console.error('Error:', err);
                       return;
                     }
-                    const filePath = `./images/${lastId + 1}.png`; // Replace with the desired file path
-                    saveImageFromBase64(imageBase64, filePath);
-                    DB_OBEJCT.query(`INSERT INTO user_images (iName, base64, uId) VALUES ("${filename}", '${imageBase64}', ${lastId + 1})`, (err, result) => {
-                      if (err) {
-                        throw err
-                      } else {
-                        console.log('Successed!');
-      
-                        return res.send({ ok: true,  result: {
-                          flag: 1,
-                          apikey: generateAPIKEY()
-                        } });
+
+                    getApiKeyList(async (err, keys) => {
+                      const filePath = `./images/${lastId + 1}.png`; // Replace with the desired file path
+                      saveImageFromBase64(imageBase64, filePath);
+
+                      let keyFlag = '';
+
+                      for (let j = 0; j < keys.length; j++) {
+                        if (decrypt(keys[j].apikey)  == requestIp.getClientIp(req)) {
+                          keyFlag = keys[j].apikey;
+                          break;
+                        }
                       }
-                    });
+
+                      if (keyFlag === '') keyFlag = generateAPIKEY(requestIp.getClientIp(req));
+
+ 
+                      DB_OBEJCT.query(`INSERT INTO user_images (iName, base64, uId, apikey) VALUES ("${filename}", '${imageBase64}', ${lastId + 1}, "${keyFlag}")`, (err, result) => {
+                        if (err) {
+                          throw err
+                        } else {
+                          console.log('Successed!');
+        
+                          return res.send({ ok: true,  result: {
+                            flag: 1,
+                            apikey: keyFlag
+                          } });
+                        }
+                      });
+                    })
                   });
                 }
               }).catch(console.error);
